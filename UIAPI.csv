@@ -1,0 +1,9 @@
+Name,Method,Curl Command
+Fetch All Athletes,GET,"curl -s http://localhost:3000/api/athletes"
+Upload Athletes (Replace All),POST,"curl -s -X POST http://localhost:3000/api/athletes -H 'Content-Type: application/json' -d '{""athletes"":[{""name"":""Neeraj Chopra"",""sport"":""Athletics"",""event"":""Javelin Throw"",""tier"":1,""category"":""Senior""}]}'"
+Remove Single Athlete,DELETE,"curl -s -X DELETE http://localhost:3000/api/athletes -H 'Content-Type: application/json' -d '{""athleteName"":""Neeraj Chopra""}'"
+Fetch All Submissions,GET,"curl -s http://localhost:3000/api/submissions"
+Fetch Submissions by Athlete,GET,"curl -s 'http://localhost:3000/api/submissions?athleteName=Neeraj%20Chopra'"
+Fetch Submissions by Period,GET,"curl -s 'http://localhost:3000/api/submissions?periodStart=2026-04-01'"
+Fetch Submissions by Athlete and Period,GET,"curl -s 'http://localhost:3000/api/submissions?athleteName=Neeraj%20Chopra&periodStart=2026-04-01'"
+Submit New Report,POST,"curl -s -X POST http://localhost:3000/api/submissions -H 'Content-Type: application/json' -d '{""athleteName"":""Neeraj Chopra"",""sport"":""Athletics"",""event"":""Javelin Throw"",""tier"":1,""category"":""Senior"",""periodStart"":""2026-04-01"",""periodEnd"":""2026-04-15"",""successfulInterventions"":""Completed rehab program"",""plannedInterventions"":""Start strength training"",""plannedPeriodStart"":""2026-04-16"",""plannedPeriodEnd"":""2026-04-30"",""currentLocation"":""SAI Bangalore"",""generalUpdate"":""Recovery on track"",""callsCount"":3,""meetingsCount"":2}'"

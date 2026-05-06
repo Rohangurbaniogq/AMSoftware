@@ -1,0 +1,6 @@
+Method,Endpoint (Next.js),Google Apps Script Action,Purpose,Request Body / Params,Response Format,Used By
+GET,/api/athletes,getAthletes,Fetch all athletes from Google Sheets,None,"[{name, sport, event, tier, category}]",Form Page / Dashboard / Upload Page
+POST,/api/athletes,uploadAthletes (chunked via appendAthletes),Upload/replace entire athlete list from CSV,"{ athletes: [{name, sport, event, tier, category}] }","{success, message, count}",Upload Page - Confirm Upload
+DELETE,/api/athletes,removeAthlete,Remove a single athlete by name,"{ athleteName: string }","{success, message}",Upload Page - Remove button
+GET,/api/submissions,getSubmissions,Fetch all submissions (with optional filters),"?athleteName=X&periodStart=Y (optional query params)","[{athleteName, sport, event, tier, category, periodStart, periodEnd, successfulInterventions, plannedInterventions, plannedPeriodStart, plannedPeriodEnd, currentLocation, generalUpdate, callsCount, meetingsCount, timestamp}]",Dashboard Page
+POST,/api/submissions,submit,Submit a new report for an athlete+period,"{athleteName, sport, event, tier, category, periodStart, periodEnd, successfulInterventions, plannedInterventions, plannedPeriodStart, plannedPeriodEnd, currentLocation, generalUpdate, callsCount, meetingsCount}","{success, message}",Form Page - Submit Report
