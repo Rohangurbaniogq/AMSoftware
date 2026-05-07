@@ -105,7 +105,7 @@ export default function UploadPage() {
         const parsed: Athlete[] = [];
 
         const headers = results.meta.fields || [];
-        const requiredHeaders = ["Athlete", "Sport", "Junior/Senior", "Gender", "Age", "Event", "Training base", "Physio", "SnC", "Psychologist", "Nutritionist", "TOPS Support"];
+        const requiredHeaders = ["Athlete", "Sport", "Junior/Senior"];
         const missing = requiredHeaders.filter(
           (h) => !headers.some((hdr) => hdr.toLowerCase().trim() === h.toLowerCase())
         );
@@ -456,7 +456,7 @@ export default function UploadPage() {
                 {file ? file.name : "Drop CSV file here or click to browse"}
               </p>
               <p className="text-xs text-[var(--foreground)]/40 max-w-md mx-auto">
-                Required: Athlete, Sport, Junior/Senior, Gender, Age, Event, Training base, Physio, SnC, Psychologist, Nutritionist, TOPS Support
+                Required: Athlete, Sport, Junior/Senior. Optional: Gender, Age, Event, Training base, Physio, SnC, Psychologist, Nutritionist, TOPS Support
               </p>
               <p className="text-xs text-red-400 mt-2">
                 Warning: This will replace all existing athletes
