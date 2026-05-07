@@ -9,7 +9,7 @@ import { formatDateDisplay } from "@/lib/date-utils";
 import { Athlete, Submission, INTERVENTION_CATEGORIES } from "@/lib/types";
 
 type TabType = "athlete" | "sport" | "category";
-type DetailView = "successful" | "planned" | "meetings" | "calls" | null;
+type DetailView = "successful" | "planned" | "meetings" | "calls" | "general" | null;
 
 const TABS: { key: TabType; label: string }[] = [
   { key: "athlete", label: "Athlete" },
@@ -22,6 +22,7 @@ const DETAIL_BUTTONS: { key: DetailView & string; label: string }[] = [
   { key: "planned", label: "Planned Interventions" },
   { key: "meetings", label: "Meetings" },
   { key: "calls", label: "Calls" },
+  { key: "general", label: "General Updates" },
 ];
 
 const PIE_COLORS = [
@@ -325,10 +326,11 @@ function DetailButtons({ detailView, onToggle, submissions }: { detailView: Deta
     planned: submissions.filter((s) => s.plannedCategory || s.plannedDetails).length,
     meetings: submissions.reduce((sum, s) => sum + s.meetingsCount, 0),
     calls: submissions.reduce((sum, s) => sum + s.callsCount, 0),
+    general: submissions.filter((s) => s.generalUpdate).length,
   };
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-4 sm:mt-6">
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 mt-4 sm:mt-6">
       {DETAIL_BUTTONS.map((btn) => (
         <button
           key={btn.key}
@@ -623,6 +625,38 @@ function DetailPanel({ view, submissions, showAthleteName }: { view: NonNullable
             </div>
           ))
         )}
+      </div>
+    );
+  }
+
+  if (view === "general") {
+    const withData = sorted.filter((s) => s.generalUpdate);
+    if (withData.length === 0) {
+      return <p className="text-center py-8 text-[var(--foreground)]/30 text-sm">No general updates recorded</p>;
+    }
+    return (
+      <div className="space-y-4">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--yellow)]">
+          General Updates ({withData.length})
+        </h3>
+        {withData.map((sub, idx) => (
+          <div key={`${sub.athleteName}-${sub.date}-${sub.timestamp}-${idx}`} className="bg-[var(--section-bg)] rounded-lg p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {showAthleteName && (
+                  <span className="text-xs font-bold text-[var(--foreground)]">{sub.athleteName} &middot;</span>
+                )}
+                <span className="text-xs font-semibold text-[var(--yellow)]">
+                  {formatDateDisplay(sub.date)}
+                </span>
+              </div>
+              {sub.currentLocation && (
+                <span className="text-xs text-[var(--foreground)]/40">{sub.currentLocation}</span>
+              )}
+            </div>
+            <p className="text-sm text-[var(--foreground)]">{sub.generalUpdate}</p>
+          </div>
+        ))}
       </div>
     );
   }
