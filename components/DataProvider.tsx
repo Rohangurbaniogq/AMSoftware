@@ -10,6 +10,7 @@ interface DataContextType {
   loading: boolean;
   refreshAthletes: () => Promise<void>;
   refreshSubmissions: () => Promise<void>;
+  addLocalSubmission: (sub: Submission) => void;
 }
 
 const DataContext = createContext<DataContextType>({
@@ -18,6 +19,7 @@ const DataContext = createContext<DataContextType>({
   loading: true,
   refreshAthletes: async () => {},
   refreshSubmissions: async () => {},
+  addLocalSubmission: () => {},
 });
 
 const ATHLETES_CACHE_KEY = "ogq_athletes_cache";
@@ -69,6 +71,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const addLocalSubmission = useCallback((sub: Submission) => {
+    setSubmissions((prev) => {
+      const updated = [...prev, sub];
+      writeCache(SUBMISSIONS_CACHE_KEY, updated);
+      return updated;
+    });
+  }, []);
+
   useEffect(() => {
     if (fetched.current) return;
     fetched.current = true;
@@ -80,7 +90,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [refreshAthletes, refreshSubmissions]);
 
   return (
-    <DataContext.Provider value={{ athletes, submissions, loading, refreshAthletes, refreshSubmissions }}>
+    <DataContext.Provider value={{ athletes, submissions, loading, refreshAthletes, refreshSubmissions, addLocalSubmission }}>
       {children}
     </DataContext.Provider>
   );

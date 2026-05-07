@@ -11,6 +11,13 @@ import { submitForm } from "@/lib/sheets";
 import { Athlete, Submission, INTERVENTION_CATEGORIES } from "@/lib/types";
 
 const CONVERTED_KEY = "ogq_converted_planned";
+const CONVERSION_LOG_KEY = "ogq_conversion_log";
+
+interface ConversionEntry {
+  athleteName: string;
+  category: string;
+  convertedAt: string;
+}
 
 function getConvertedSet(): Set<string> {
   try {
@@ -19,10 +26,21 @@ function getConvertedSet(): Set<string> {
   } catch { return new Set(); }
 }
 
-function markConverted(key: string) {
+function getConversionLog(): ConversionEntry[] {
+  try {
+    const raw = localStorage.getItem(CONVERSION_LOG_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function markConverted(key: string, athleteName: string, category: string) {
   const set = getConvertedSet();
   set.add(key);
   localStorage.setItem(CONVERTED_KEY, JSON.stringify([...set]));
+
+  const log = getConversionLog();
+  log.push({ athleteName, category, convertedAt: new Date().toISOString() });
+  localStorage.setItem(CONVERSION_LOG_KEY, JSON.stringify(log));
 }
 
 function submissionKey(sub: Submission) {
@@ -30,7 +48,7 @@ function submissionKey(sub: Submission) {
 }
 
 type TabType = "athlete" | "sport" | "category";
-type DetailView = "successful" | "planned" | "meetings" | "calls" | "general" | null;
+type DetailView = "successful" | "planned" | "meetings" | "calls" | "general" | "conversions" | null;
 
 const TABS: { key: TabType; label: string }[] = [
   { key: "athlete", label: "Athlete" },
@@ -44,6 +62,7 @@ const DETAIL_BUTTONS: { key: DetailView & string; label: string }[] = [
   { key: "meetings", label: "Meetings" },
   { key: "calls", label: "Calls" },
   { key: "general", label: "General Updates" },
+  { key: "conversions", label: "Conversions" },
 ];
 
 const PIE_COLORS = [
@@ -53,10 +72,11 @@ const PIE_COLORS = [
 ];
 
 export default function DashboardPage() {
-  const { athletes, submissions: allSubmissions, loading, refreshSubmissions } = useData();
+  const { athletes, submissions: allSubmissions, loading, addLocalSubmission } = useData();
   const [tab, setTab] = useState<TabType>("athlete");
   const [detailView, setDetailView] = useState<DetailView>(null);
   const [convertedKeys, setConvertedKeys] = useState<Set<string>>(() => getConvertedSet());
+  const [conversionLog, setConversionLog] = useState<ConversionEntry[]>(() => getConversionLog());
   const [converting, setConverting] = useState(false);
 
   // Per-tab selection state
@@ -91,9 +111,10 @@ export default function DashboardPage() {
       const result = await submitForm(newSubmission);
       if (result.success) {
         const key = submissionKey(sub);
-        markConverted(key);
+        markConverted(key, sub.athleteName, sub.plannedCategory || "");
         setConvertedKeys(getConvertedSet());
-        await refreshSubmissions();
+        setConversionLog(getConversionLog());
+        addLocalSubmission(newSubmission);
         toast.success("Planned intervention converted to successful");
       } else {
         toast.error(result.message || "Conversion failed");
@@ -103,7 +124,7 @@ export default function DashboardPage() {
     } finally {
       setConverting(false);
     }
-  }, [converting, refreshSubmissions]);
+  }, [converting, addLocalSubmission]);
 
   // Derived lists
   const sports = useMemo(() => [...new Set(athletes.map((a) => a.sport))].sort(), [athletes]);
@@ -174,13 +195,13 @@ export default function DashboardPage() {
                   <>
                     <AthleteInfoCard athlete={athlete} />
                     <InterventionPieChart submissions={filteredSubmissions} label={selectedAthlete} />
-                    <DetailButtons detailView={detailView} onToggle={handleDetailToggle} submissions={filteredSubmissions} convertedKeys={convertedKeys} />
+                    <DetailButtons detailView={detailView} onToggle={handleDetailToggle} submissions={filteredSubmissions} convertedKeys={convertedKeys} conversionLog={conversionLog} />
                     {detailView && (
                       <Card className="mt-4">
                         {filteredSubmissions.length === 0 ? (
                           <EmptyState label={selectedAthlete} />
                         ) : (
-                          <DetailPanel view={detailView} submissions={filteredSubmissions} showAthleteName={false} onConvert={handleConvert} convertedKeys={convertedKeys} />
+                          <DetailPanel view={detailView} submissions={filteredSubmissions} showAthleteName={false} onConvert={handleConvert} convertedKeys={convertedKeys} conversionLog={conversionLog} />
                         )}
                       </Card>
                     )}
@@ -231,13 +252,13 @@ export default function DashboardPage() {
                   {/* Intervention Category Pie Chart */}
                   <InterventionPieChart submissions={filteredSubmissions} label={selectedSport} />
 
-                  <DetailButtons detailView={detailView} onToggle={handleDetailToggle} submissions={filteredSubmissions} convertedKeys={convertedKeys} />
+                  <DetailButtons detailView={detailView} onToggle={handleDetailToggle} submissions={filteredSubmissions} convertedKeys={convertedKeys} conversionLog={conversionLog} />
                   {detailView && (
                     <Card className="mt-4">
                       {filteredSubmissions.length === 0 ? (
                         <EmptyState label={selectedSport} />
                       ) : (
-                        <DetailPanel view={detailView} submissions={filteredSubmissions} showAthleteName={true} onConvert={handleConvert} convertedKeys={convertedKeys} />
+                        <DetailPanel view={detailView} submissions={filteredSubmissions} showAthleteName={true} onConvert={handleConvert} convertedKeys={convertedKeys} conversionLog={conversionLog} />
                       )}
                     </Card>
                   )}
@@ -297,13 +318,13 @@ export default function DashboardPage() {
 
                   <InterventionPieChart submissions={filteredSubmissions} label={selectedCategory} />
 
-                  <DetailButtons detailView={detailView} onToggle={handleDetailToggle} submissions={filteredSubmissions} convertedKeys={convertedKeys} />
+                  <DetailButtons detailView={detailView} onToggle={handleDetailToggle} submissions={filteredSubmissions} convertedKeys={convertedKeys} conversionLog={conversionLog} />
                   {detailView && (
                     <Card className="mt-4">
                       {filteredSubmissions.length === 0 ? (
                         <EmptyState label={selectedCategory} />
                       ) : (
-                        <DetailPanel view={detailView} submissions={filteredSubmissions} showAthleteName={true} onConvert={handleConvert} convertedKeys={convertedKeys} />
+                        <DetailPanel view={detailView} submissions={filteredSubmissions} showAthleteName={true} onConvert={handleConvert} convertedKeys={convertedKeys} conversionLog={conversionLog} />
                       )}
                     </Card>
                   )}
@@ -381,7 +402,8 @@ function AthleteInfoCard({ athlete }: { athlete: Athlete }) {
   );
 }
 
-function DetailButtons({ detailView, onToggle, submissions, convertedKeys }: { detailView: DetailView; onToggle: (view: DetailView & string) => void; submissions: Submission[]; convertedKeys?: Set<string> }) {
+function DetailButtons({ detailView, onToggle, submissions, convertedKeys, conversionLog }: { detailView: DetailView; onToggle: (view: DetailView & string) => void; submissions: Submission[]; convertedKeys?: Set<string>; conversionLog?: ConversionEntry[] }) {
+  const athleteNames = new Set(submissions.map((s) => s.athleteName));
   const counts = {
     successful: submissions.filter((s) => s.successfulCategory || s.successfulDetails).length,
     planned: submissions.filter((s) => {
@@ -392,10 +414,11 @@ function DetailButtons({ detailView, onToggle, submissions, convertedKeys }: { d
     meetings: submissions.reduce((sum, s) => sum + s.meetingsCount, 0),
     calls: submissions.reduce((sum, s) => sum + s.callsCount, 0),
     general: submissions.filter((s) => s.generalUpdate).length,
+    conversions: (conversionLog || []).filter((c) => athleteNames.has(c.athleteName)).length,
   };
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 mt-4 sm:mt-6">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 mt-4 sm:mt-6">
       {DETAIL_BUTTONS.map((btn) => (
         <button
           key={btn.key}
@@ -581,7 +604,7 @@ function EmptyState({ label }: { label: string }) {
   );
 }
 
-function DetailPanel({ view, submissions, showAthleteName, onConvert, convertedKeys }: { view: NonNullable<DetailView>; submissions: Submission[]; showAthleteName: boolean; onConvert?: (sub: Submission) => void; convertedKeys?: Set<string> }) {
+function DetailPanel({ view, submissions, showAthleteName, onConvert, convertedKeys, conversionLog }: { view: NonNullable<DetailView>; submissions: Submission[]; showAthleteName: boolean; onConvert?: (sub: Submission) => void; convertedKeys?: Set<string>; conversionLog?: ConversionEntry[] }) {
   const sorted = [...submissions].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
@@ -704,6 +727,48 @@ function DetailPanel({ view, submissions, showAthleteName, onConvert, convertedK
             </div>
           ))
         )}
+      </div>
+    );
+  }
+
+  if (view === "conversions") {
+    const athleteNames = new Set(submissions.map((s) => s.athleteName));
+    const relevant = (conversionLog || []).filter((c) => athleteNames.has(c.athleteName));
+    if (relevant.length === 0) {
+      return <p className="text-center py-8 text-[var(--foreground)]/30 text-sm">No conversions recorded</p>;
+    }
+    // Group by athlete
+    const byAthlete: Record<string, ConversionEntry[]> = {};
+    relevant.forEach((c) => {
+      if (!byAthlete[c.athleteName]) byAthlete[c.athleteName] = [];
+      byAthlete[c.athleteName].push(c);
+    });
+    const athleteEntries = Object.entries(byAthlete).sort((a, b) => b[1].length - a[1].length);
+    return (
+      <div className="space-y-4">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-green-500">
+          Planned → Successful Conversions ({relevant.length})
+        </h3>
+        {athleteEntries.map(([name, entries]) => (
+          <div key={name} className="bg-[var(--section-bg)] rounded-lg p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-bold">{name}</span>
+              <span className="text-lg font-bold text-green-500">{entries.length}</span>
+            </div>
+            <div className="space-y-1.5">
+              {entries.map((entry, i) => (
+                <div key={i} className="flex items-center justify-between text-xs">
+                  <span className="text-[var(--foreground)]/60">
+                    {entry.category || "—"}
+                  </span>
+                  <span className="text-[var(--foreground)]/40">
+                    {formatDateDisplay(entry.convertedAt.split("T")[0])}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
