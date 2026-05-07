@@ -1,12 +1,33 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import toast from "react-hot-toast";
 import { Card } from "@/components/Card";
 import { SearchableDropdown } from "@/components/SearchableDropdown";
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { useData } from "@/components/DataProvider";
 import { formatDateDisplay } from "@/lib/date-utils";
+import { submitForm } from "@/lib/sheets";
 import { Athlete, Submission, INTERVENTION_CATEGORIES } from "@/lib/types";
+
+const CONVERTED_KEY = "ogq_converted_planned";
+
+function getConvertedSet(): Set<string> {
+  try {
+    const raw = localStorage.getItem(CONVERTED_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch { return new Set(); }
+}
+
+function markConverted(key: string) {
+  const set = getConvertedSet();
+  set.add(key);
+  localStorage.setItem(CONVERTED_KEY, JSON.stringify([...set]));
+}
+
+function submissionKey(sub: Submission) {
+  return `${sub.athleteName}|${sub.date}|${sub.timestamp}|${sub.plannedCategory}`;
+}
 
 type TabType = "athlete" | "sport" | "category";
 type DetailView = "successful" | "planned" | "meetings" | "calls" | "general" | null;
@@ -32,9 +53,11 @@ const PIE_COLORS = [
 ];
 
 export default function DashboardPage() {
-  const { athletes, submissions: allSubmissions, loading } = useData();
+  const { athletes, submissions: allSubmissions, loading, refreshSubmissions } = useData();
   const [tab, setTab] = useState<TabType>("athlete");
   const [detailView, setDetailView] = useState<DetailView>(null);
+  const [convertedKeys, setConvertedKeys] = useState<Set<string>>(() => getConvertedSet());
+  const [converting, setConverting] = useState(false);
 
   // Per-tab selection state
   const [selectedAthlete, setSelectedAthlete] = useState("");
@@ -43,6 +66,44 @@ export default function DashboardPage() {
 
   // Reset detail view when selection changes
   useEffect(() => { setDetailView(null); }, [selectedAthlete, selectedSport, selectedCategory, tab]);
+
+  const handleConvert = useCallback(async (sub: Submission) => {
+    if (converting) return;
+    if (!confirm(`Convert "${sub.plannedCategory}" to a successful intervention?`)) return;
+    setConverting(true);
+    try {
+      const newSubmission: Submission = {
+        athleteName: sub.athleteName,
+        sport: sub.sport,
+        event: sub.event,
+        category: sub.category,
+        date: new Date().toISOString().split("T")[0],
+        successfulCategory: sub.plannedCategory as Submission["successfulCategory"],
+        successfulDetails: sub.plannedDetails || `Converted from planned intervention (${formatDateDisplay(sub.date)})`,
+        plannedCategory: "",
+        plannedDetails: "",
+        currentLocation: sub.currentLocation,
+        generalUpdate: "",
+        callsCount: 0,
+        meetingsCount: 0,
+        timestamp: new Date().toISOString(),
+      };
+      const result = await submitForm(newSubmission);
+      if (result.success) {
+        const key = submissionKey(sub);
+        markConverted(key);
+        setConvertedKeys(getConvertedSet());
+        await refreshSubmissions();
+        toast.success("Planned intervention converted to successful");
+      } else {
+        toast.error(result.message || "Conversion failed");
+      }
+    } catch {
+      toast.error("Conversion failed");
+    } finally {
+      setConverting(false);
+    }
+  }, [converting, refreshSubmissions]);
 
   // Derived lists
   const sports = useMemo(() => [...new Set(athletes.map((a) => a.sport))].sort(), [athletes]);
@@ -113,13 +174,13 @@ export default function DashboardPage() {
                   <>
                     <AthleteInfoCard athlete={athlete} />
                     <InterventionPieChart submissions={filteredSubmissions} label={selectedAthlete} />
-                    <DetailButtons detailView={detailView} onToggle={handleDetailToggle} submissions={filteredSubmissions} />
+                    <DetailButtons detailView={detailView} onToggle={handleDetailToggle} submissions={filteredSubmissions} convertedKeys={convertedKeys} />
                     {detailView && (
                       <Card className="mt-4">
                         {filteredSubmissions.length === 0 ? (
                           <EmptyState label={selectedAthlete} />
                         ) : (
-                          <DetailPanel view={detailView} submissions={filteredSubmissions} showAthleteName={false} />
+                          <DetailPanel view={detailView} submissions={filteredSubmissions} showAthleteName={false} onConvert={handleConvert} convertedKeys={convertedKeys} />
                         )}
                       </Card>
                     )}
@@ -170,13 +231,13 @@ export default function DashboardPage() {
                   {/* Intervention Category Pie Chart */}
                   <InterventionPieChart submissions={filteredSubmissions} label={selectedSport} />
 
-                  <DetailButtons detailView={detailView} onToggle={handleDetailToggle} submissions={filteredSubmissions} />
+                  <DetailButtons detailView={detailView} onToggle={handleDetailToggle} submissions={filteredSubmissions} convertedKeys={convertedKeys} />
                   {detailView && (
                     <Card className="mt-4">
                       {filteredSubmissions.length === 0 ? (
                         <EmptyState label={selectedSport} />
                       ) : (
-                        <DetailPanel view={detailView} submissions={filteredSubmissions} showAthleteName={true} />
+                        <DetailPanel view={detailView} submissions={filteredSubmissions} showAthleteName={true} onConvert={handleConvert} convertedKeys={convertedKeys} />
                       )}
                     </Card>
                   )}
@@ -236,13 +297,13 @@ export default function DashboardPage() {
 
                   <InterventionPieChart submissions={filteredSubmissions} label={selectedCategory} />
 
-                  <DetailButtons detailView={detailView} onToggle={handleDetailToggle} submissions={filteredSubmissions} />
+                  <DetailButtons detailView={detailView} onToggle={handleDetailToggle} submissions={filteredSubmissions} convertedKeys={convertedKeys} />
                   {detailView && (
                     <Card className="mt-4">
                       {filteredSubmissions.length === 0 ? (
                         <EmptyState label={selectedCategory} />
                       ) : (
-                        <DetailPanel view={detailView} submissions={filteredSubmissions} showAthleteName={true} />
+                        <DetailPanel view={detailView} submissions={filteredSubmissions} showAthleteName={true} onConvert={handleConvert} convertedKeys={convertedKeys} />
                       )}
                     </Card>
                   )}
@@ -320,10 +381,14 @@ function AthleteInfoCard({ athlete }: { athlete: Athlete }) {
   );
 }
 
-function DetailButtons({ detailView, onToggle, submissions }: { detailView: DetailView; onToggle: (view: DetailView & string) => void; submissions: Submission[] }) {
+function DetailButtons({ detailView, onToggle, submissions, convertedKeys }: { detailView: DetailView; onToggle: (view: DetailView & string) => void; submissions: Submission[]; convertedKeys?: Set<string> }) {
   const counts = {
     successful: submissions.filter((s) => s.successfulCategory || s.successfulDetails).length,
-    planned: submissions.filter((s) => s.plannedCategory || s.plannedDetails).length,
+    planned: submissions.filter((s) => {
+      if (!s.plannedCategory && !s.plannedDetails) return false;
+      if (convertedKeys && convertedKeys.has(submissionKey(s))) return false;
+      return true;
+    }).length,
     meetings: submissions.reduce((sum, s) => sum + s.meetingsCount, 0),
     calls: submissions.reduce((sum, s) => sum + s.callsCount, 0),
     general: submissions.filter((s) => s.generalUpdate).length,
@@ -516,7 +581,7 @@ function EmptyState({ label }: { label: string }) {
   );
 }
 
-function DetailPanel({ view, submissions, showAthleteName }: { view: NonNullable<DetailView>; submissions: Submission[]; showAthleteName: boolean }) {
+function DetailPanel({ view, submissions, showAthleteName, onConvert, convertedKeys }: { view: NonNullable<DetailView>; submissions: Submission[]; showAthleteName: boolean; onConvert?: (sub: Submission) => void; convertedKeys?: Set<string> }) {
   const sorted = [...submissions].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
@@ -561,7 +626,11 @@ function DetailPanel({ view, submissions, showAthleteName }: { view: NonNullable
   }
 
   if (view === "planned") {
-    const withData = sorted.filter((s) => s.plannedCategory || s.plannedDetails);
+    const withData = sorted.filter((s) => {
+      if (!s.plannedCategory && !s.plannedDetails) return false;
+      if (convertedKeys && convertedKeys.has(submissionKey(s))) return false;
+      return true;
+    });
     if (withData.length === 0) {
       return <p className="text-center py-8 text-[var(--foreground)]/30 text-sm">No planned interventions recorded</p>;
     }
@@ -592,6 +661,16 @@ function DetailPanel({ view, submissions, showAthleteName }: { view: NonNullable
             </div>
             {sub.plannedDetails && (
               <p className="text-sm text-[var(--foreground)]">{sub.plannedDetails}</p>
+            )}
+            {onConvert && (
+              <div className="flex justify-end mt-3 pt-3 border-t border-[var(--grey-border)]/30">
+                <button
+                  onClick={() => onConvert(sub)}
+                  className="px-3 py-1.5 text-xs font-bold text-green-500 bg-green-500/10 hover:bg-green-500/20 rounded-lg transition-all duration-200"
+                >
+                  Convert to Successful
+                </button>
+              </div>
             )}
           </div>
         ))}
